@@ -1,11 +1,11 @@
 /* eslint-disable max-lines */
 import { getCurrentHub, hasTracingEnabled } from '@sentry/core';
-import type { DynamicSamplingContext, Span } from '@sentry/types';
+import type { Span } from '@sentry/types';
 import {
   addInstrumentationHandler,
+  addTracingHeadersToFetchRequest,
   BAGGAGE_HEADER_NAME,
   dynamicSamplingContextToSentryBaggageHeader,
-  isInstanceOf,
   stringMatchesSomePattern,
 } from '@sentry/utils';
 
@@ -89,17 +89,6 @@ export interface XHRData {
   startTimestamp: number;
   endTimestamp?: number;
 }
-
-type PolymorphicRequestHeaders =
-  | Record<string, string | undefined>
-  | Array<[string, string]>
-  // the below is not preicsely the Header type used in Request, but it'll pass duck-typing
-  | {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      [key: string]: any;
-      append: (key: string, value: string) => void;
-      get: (key: string) => string;
-    };
 
 export const defaultRequestInstrumentationOptions: RequestInstrumentationOptions = {
   traceFetch: true,
@@ -218,70 +207,6 @@ export function fetchCallback(
         options,
       );
     }
-  }
-}
-
-function addTracingHeadersToFetchRequest(
-  request: string | Request,
-  dynamicSamplingContext: Partial<DynamicSamplingContext>,
-  span: Span,
-  options: {
-    headers?:
-      | {
-          [key: string]: string[] | string | undefined;
-        }
-      | Request['headers'];
-  },
-): PolymorphicRequestHeaders {
-  const sentryBaggageHeader = dynamicSamplingContextToSentryBaggageHeader(dynamicSamplingContext);
-  const sentryTraceHeader = span.toTraceparent();
-
-  const headers =
-    typeof Request !== 'undefined' && isInstanceOf(request, Request) ? (request as Request).headers : options.headers;
-
-  if (!headers) {
-    return { 'sentry-trace': sentryTraceHeader, baggage: sentryBaggageHeader };
-  } else if (typeof Headers !== 'undefined' && isInstanceOf(headers, Headers)) {
-    const newHeaders = new Headers(headers as Headers);
-
-    newHeaders.append('sentry-trace', sentryTraceHeader);
-
-    if (sentryBaggageHeader) {
-      // If the same header is appended miultiple times the browser will merge the values into a single request header.
-      // Its therefore safe to simply push a "baggage" entry, even though there might already be another baggage header.
-      newHeaders.append(BAGGAGE_HEADER_NAME, sentryBaggageHeader);
-    }
-
-    return newHeaders as PolymorphicRequestHeaders;
-  } else if (Array.isArray(headers)) {
-    const newHeaders = [...headers, ['sentry-trace', sentryTraceHeader]];
-
-    if (sentryBaggageHeader) {
-      // If there are multiple entries with the same key, the browser will merge the values into a single request header.
-      // Its therefore safe to simply push a "baggage" entry, even though there might already be another baggage header.
-      newHeaders.push([BAGGAGE_HEADER_NAME, sentryBaggageHeader]);
-    }
-
-    return newHeaders;
-  } else {
-    const existingBaggageHeader = 'baggage' in headers ? headers.baggage : undefined;
-    const newBaggageHeaders: string[] = [];
-
-    if (Array.isArray(existingBaggageHeader)) {
-      newBaggageHeaders.push(...existingBaggageHeader);
-    } else if (existingBaggageHeader) {
-      newBaggageHeaders.push(existingBaggageHeader);
-    }
-
-    if (sentryBaggageHeader) {
-      newBaggageHeaders.push(sentryBaggageHeader);
-    }
-
-    return {
-      ...(headers as Exclude<typeof headers, Headers>),
-      'sentry-trace': sentryTraceHeader,
-      baggage: newBaggageHeaders.length > 0 ? newBaggageHeaders.join(',') : undefined,
-    };
   }
 }
 

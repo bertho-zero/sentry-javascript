@@ -183,7 +183,7 @@ function instrumentFetch(): void {
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /** Extract `method` from fetch call arguments */
-function getFetchMethod(fetchArgs: any[] = []): string {
+export function getFetchMethod(fetchArgs: any[] = []): string {
   if ('Request' in WINDOW && isInstanceOf(fetchArgs[0], Request) && fetchArgs[0].method) {
     return String(fetchArgs[0].method).toUpperCase();
   }
@@ -194,7 +194,7 @@ function getFetchMethod(fetchArgs: any[] = []): string {
 }
 
 /** Extract `url` from fetch call arguments */
-function getFetchUrl(fetchArgs: any[] = []): string {
+export function getFetchUrl(fetchArgs: any[] = []): string {
   if (typeof fetchArgs[0] === 'string') {
     return fetchArgs[0];
   }
